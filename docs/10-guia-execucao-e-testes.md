@@ -49,10 +49,19 @@ added 312 packages, and audited 313 packages in 45s
 Crie um arquivo chamado `.env` na **raiz do projeto** (no mesmo nível que `package.json`) com o seguinte conteúdo:
 
 ```
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="mysql://root:@localhost:3306/contatos_db"
 ```
 
-**Por que isso é necessário:** a aplicação lê `DATABASE_URL` para saber onde está o arquivo do banco SQLite. O valor `file:./dev.db` significa "um arquivo chamado `dev.db` na raiz do projeto". Se este arquivo não existir, o Prisma cria automaticamente na próxima etapa.
+Ajuste o valor conforme suas credenciais MySQL. O formato é:
+```
+mysql://<usuario>:<senha>@<host>:<porta>/<banco>
+```
+
+**Por que isso é necessário:** o Prisma lê `DATABASE_URL` para conectar ao servidor MySQL. O banco `contatos_db` deve existir antes de aplicar as migrations — crie-o pelo MySQL Workbench ou via terminal:
+
+```sql
+CREATE DATABASE contatos_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
 **Atenção:** o arquivo `.env` não deve ser enviado ao git. Ele já está no `.gitignore`.
 
@@ -74,13 +83,13 @@ npx prisma migrate deploy
 **Saída esperada:**
 ```
 Prisma schema loaded from prisma/schema.prisma
-Datasource "db": SQLite database "dev.db" at "file:./dev.db"
+Datasource "db": MySQL database "contatos_db" at "localhost:3306"
 
 1 migration found in prisma/migrations
 
 The following migration(s) have been applied:
   migrations/
-    └─ 20260325005323_init/
+    └─ 20260414_init/
       └─ migration.sql
 
 All migrations have been successfully applied.
@@ -99,15 +108,15 @@ npx prisma migrate dev --name init
 npx prisma generate
 ```
 
-**O que acontece:** o Prisma lê `prisma/schema.prisma` e gera o código TypeScript do client em `src/generated/prisma/`. Este código contém os tipos e a lógica de acesso ao banco específica para os modelos `User` e `Contact`.
+**O que acontece:** o Prisma lê `prisma/schema.prisma` e gera o código TypeScript do client em `node_modules/@prisma/client`. Este código contém os tipos e a lógica de acesso ao banco específica para os modelos `User` e `Contact`.
 
-**Por que é necessário:** sem executar este comando, a pasta `src/generated/` não existe (está no `.gitignore`) e o `import { PrismaClient } from "../generated/prisma/client.js"` falharia.
+**Por que é necessário:** sem executar este comando, o `import { PrismaClient } from "@prisma/client"` em `src/database/prisma-client.ts` não teria os tipos corretos para `User` e `Contact`.
 
 **Saída esperada:**
 ```
 Prisma schema loaded from prisma/schema.prisma
 
-✔ Generated Prisma Client to ./src/generated/prisma in 234ms
+✔ Generated Prisma Client (v6.x.x) to ./node_modules/@prisma/client in 174ms
 ```
 
 ---
@@ -898,9 +907,9 @@ password: <senha-em-texto-puro>
 
 ## Parte 7 — Problemas comuns e soluções
 
-### "Cannot find module '../generated/prisma/client.js'"
+### "Cannot find module '@prisma/client'"
 
-**Causa:** `npx prisma generate` não foi executado, ou a pasta `src/generated/` está no gitignore e não foi gerada.
+**Causa:** `npx prisma generate` não foi executado após o clone ou instalação.
 
 **Solução:**
 ```bash
@@ -909,9 +918,9 @@ npx prisma generate
 
 ---
 
-### "The table `main.users` does not exist"
+### "The table `users` does not exist"
 
-**Causa:** as migrations não foram aplicadas.
+**Causa:** as migrations não foram aplicadas ao banco MySQL.
 
 **Solução:**
 ```bash
@@ -928,7 +937,7 @@ npx prisma migrate dev --name init
 
 **Solução:** crie o arquivo `.env` na raiz do projeto (no mesmo nível que `package.json`) com:
 ```
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="mysql://root:@localhost:3306/contatos_db"
 ```
 
 ---

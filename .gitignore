@@ -7,12 +7,15 @@ dist/
 # Variáveis de Ambiente e Segredos
 .env
 .env.*
+.claude
 
 # Banco de Dados (Local e temporários)
 dev.db
 dev.db-journal
 *.db-journal
-src/generated
+
+# Código gerado (Prisma e similares)
+src/generated/
 
 # Logs
 *.log
