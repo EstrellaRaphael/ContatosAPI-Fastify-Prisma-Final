@@ -17,6 +17,7 @@ Para testar a API você precisa de uma ferramenta que envie requisições HTTP. 
 | **Insomnia** | App desktop | Interface rica, fácil de organizar coleções |
 | **Postman** | App desktop | Mais completo, ideal para times |
 | **Bruno** | App desktop | Open source, arquivos versionáveis |
+| **Swagger UI** | Navegador (integrado) | Acessível em `http://localhost:3100/docs` com o servidor rodando — sem instalar nada |
 
 Os exemplos neste guia usam `curl` (funciona no terminal do Windows, Mac e Linux) e também mostram como montar a requisição em ferramentas com interface gráfica.
 
@@ -132,9 +133,44 @@ O Fastify usa logs em formato JSON por padrão (com `logger: true`). O campo `"m
 
 ---
 
+### Passo 1.6 — Acessar a documentação interativa (Swagger UI)
+
+Com o servidor rodando, abra no navegador:
+
+```
+http://localhost:3100/docs
+```
+
+A interface exibe todas as rotas organizadas por grupo ("Usuários" e "Contatos"), com formulários para enviar requisições sem precisar de `curl` ou ferramentas externas. Para testar rotas protegidas diretamente pelo Swagger UI:
+
+1. Clique no botão **Authorize** (canto superior direito)
+2. Preencha os campos `EmailAuth` e `PasswordAuth` com as credenciais de um usuário admin
+3. Clique **Authorize** → **Close**
+
+A partir daí, todas as requisições feitas pelo Swagger UI incluirão os headers de autenticação automaticamente.
+
+**Endpoints adicionais gerados automaticamente:**
+
+| URL | Conteúdo |
+|---|---|
+| `GET /docs/json` | Especificação OpenAPI em JSON (importável no Postman/Insomnia) |
+| `GET /docs/yaml` | Especificação OpenAPI em YAML |
+
+---
+
 ## Parte 2 — Testando as rotas de usuários
 
-As rotas de usuários são **públicas** — não exigem autenticação.
+As rotas de usuários têm **acesso misto**:
+
+| Rota | Acesso |
+|---|---|
+| `POST /users` | Pública — qualquer um pode criar um usuário |
+| `GET /users/:id` | Pública — qualquer um pode buscar um usuário pelo id |
+| `GET /users` | **Admin** — exige headers `email` e `password` de um usuário com `role: "admin"` |
+| `PUT /users/:id` | **Admin** — exige headers `email` e `password` de um usuário com `role: "admin"` |
+| `DELETE /users/:id` | **Admin** — exige headers `email` e `password` de um usuário com `role: "admin"` |
+
+> **Antes de testar rotas admin**, crie um usuário administrador (veja abaixo) e use as credenciais dele nos exemplos de `GET /users`, `PUT /users/:id` e `DELETE /users/:id`.
 
 ---
 
@@ -184,7 +220,21 @@ curl -X POST http://localhost:3100/users \
 - O `role` é `"user"` — valor padrão definido no schema.
 - `createdAt` e `updatedAt` são preenchidos automaticamente pelo banco.
 
-**Crie um segundo usuário** (será usado para testar autenticação mais adiante):
+**Crie um usuário administrador** (necessário para testar as rotas de listagem, atualização e deleção de usuários):
+```bash
+curl -X POST http://localhost:3100/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Administrador",
+    "email": "admin@sistema.com",
+    "password": "senhaAdmin123",
+    "role": "admin"
+  }'
+```
+
+Use `admin@sistema.com` / `senhaAdmin123` nos headers das rotas protegidas por admin nos exemplos a seguir.
+
+**Crie um segundo usuário comum** (será usado para testar autenticação de contatos):
 ```bash
 curl -X POST http://localhost:3100/users \
   -H "Content-Type: application/json" \
@@ -223,11 +273,13 @@ curl -X POST http://localhost:3100/users \
 
 ### `GET /users` — Listar todos os usuários
 
-**O que faz:** retorna todos os usuários cadastrados, sem senha.
+**O que faz:** retorna todos os usuários cadastrados, sem senha. **Exige autenticação admin.**
 
 **Requisição:**
 ```bash
-curl http://localhost:3100/users
+curl http://localhost:3100/users \
+  -H "email: admin@sistema.com" \
+  -H "password: senhaAdmin123"
 ```
 
 **Resposta esperada — HTTP 200 OK:**
@@ -303,12 +355,14 @@ curl http://localhost:3100/users/00000000-0000-0000-0000-000000000000
 
 ### `PUT /users/:id` — Atualizar usuário
 
-**O que faz:** atualiza um ou mais campos de um usuário. Todos os campos são opcionais — apenas os enviados são alterados.
+**O que faz:** atualiza um ou mais campos de um usuário. Todos os campos são opcionais — apenas os enviados são alterados. **Exige autenticação admin.**
 
 **Requisição** (atualizar apenas o nome):
 ```bash
 curl -X PUT http://localhost:3100/users/<ID_DO_JOAO> \
   -H "Content-Type: application/json" \
+  -H "email: admin@sistema.com" \
+  -H "password: senhaAdmin123" \
   -d '{
     "name": "João Silva Atualizado"
   }'
@@ -332,6 +386,8 @@ curl -X PUT http://localhost:3100/users/<ID_DO_JOAO> \
 ```bash
 curl -X PUT http://localhost:3100/users/<ID_DO_JOAO> \
   -H "Content-Type: application/json" \
+  -H "email: admin@sistema.com" \
+  -H "password: senhaAdmin123" \
   -d '{
     "password": "novasenha789"
   }'
@@ -346,6 +402,8 @@ Após isso, as requisições autenticadas devem usar `novasenha789`.
 ```bash
 curl -X PUT http://localhost:3100/users/00000000-0000-0000-0000-000000000000 \
   -H "Content-Type: application/json" \
+  -H "email: admin@sistema.com" \
+  -H "password: senhaAdmin123" \
   -d '{ "name": "Qualquer" }'
 ```
 
@@ -360,11 +418,13 @@ curl -X PUT http://localhost:3100/users/00000000-0000-0000-0000-000000000000 \
 
 ### `DELETE /users/:id` — Deletar usuário
 
-**O que faz:** remove permanentemente o usuário do banco.
+**O que faz:** remove permanentemente o usuário do banco. **Todos os contatos do usuário são deletados automaticamente em cascata.** **Exige autenticação admin.**
 
 **Requisição:**
 ```bash
-curl -X DELETE http://localhost:3100/users/<ID_DA_MARIA>
+curl -X DELETE http://localhost:3100/users/<ID_DA_MARIA> \
+  -H "email: admin@sistema.com" \
+  -H "password: senhaAdmin123"
 ```
 
 **Resposta esperada — HTTP 200 OK:**
@@ -381,7 +441,7 @@ curl -X DELETE http://localhost:3100/users/<ID_DA_MARIA>
 
 A resposta contém os dados do usuário **que foi deletado** — útil para confirmar que o objeto correto foi removido e para possível exibição de confirmação na interface.
 
-> **Atenção:** se o usuário tiver contatos associados, o banco rejeitará a deleção com um erro de constraint de chave estrangeira. Delete os contatos do usuário antes de deletar o usuário.
+> **Nota:** não é necessário deletar os contatos do usuário antes — o banco remove todos os contatos vinculados automaticamente na mesma transação (cascade delete configurado no schema Prisma).
 
 ---
 
@@ -771,11 +831,12 @@ Execute este fluxo do início ao fim para validar todas as funcionalidades em se
 ### Sequência recomendada
 
 ```
-1. POST /users          → criar usuário "Ana"
-2. POST /users          → criar usuário "Bruno"
-3. GET  /users          → confirmar que ambos aparecem
-4. GET  /users/:id      → buscar "Ana" pelo id
-5. PUT  /users/:id      → atualizar nome da "Ana"
+0. POST /users          → criar usuário admin (role: "admin") — necessário para rotas admin
+1. POST /users          → criar usuário "Ana" (role: "user")
+2. POST /users          → criar usuário "Bruno" (role: "user")
+3. GET  /users          → confirmar que todos aparecem (autenticado como admin)
+4. GET  /users/:id      → buscar "Ana" pelo id (público)
+5. PUT  /users/:id      → atualizar nome da "Ana" (autenticado como admin)
 6. POST /contacts       → criar 2 contatos autenticado como "Ana"
 7. POST /contacts       → criar 1 contato autenticado como "Bruno"
 8. GET  /contacts       → listar contatos de "Ana" (deve mostrar apenas os 2 dela)
@@ -784,10 +845,8 @@ Execute este fluxo do início ao fim para validar todas as funcionalidades em se
 11. PUT  /contacts/:id  → atualizar contato de "Ana" autenticado como "Bruno" (deve dar 403)
 12. DELETE /contacts/:id → deletar contato de "Ana" autenticado como "Ana" (sucesso)
 13. GET  /contacts       → confirmar que a lista de "Ana" tem 1 contato agora
-14. DELETE /users/:id    → deletar "Bruno" (deve falhar se ele tiver contatos)
-15. DELETE /contacts/:id → deletar o contato de "Bruno" primeiro
-16. DELETE /users/:id    → deletar "Bruno" com sucesso agora
-17. GET  /users          → confirmar que só "Ana" aparece
+14. DELETE /users/:id    → deletar "Bruno" autenticado como admin (contatos de Bruno deletados automaticamente em cascata)
+15. GET  /users          → confirmar que só admin e "Ana" aparecem
 ```
 
 ---
@@ -799,10 +858,10 @@ Execute este fluxo do início ao fim para validar todas as funcionalidades em se
 | Método | Endpoint | Body | Auth | Sucesso | Erro |
 |---|---|---|---|---|---|
 | `POST` | `/users` | `{name, email, password, role?}` | Não | `201` usuário criado | `409` email duplicado |
-| `GET` | `/users` | — | Não | `200` array de usuários | — |
+| `GET` | `/users` | — | **Admin** | `200` array de usuários | `401` sem credenciais / `403` sem permissão |
 | `GET` | `/users/:id` | — | Não | `200` usuário | `404` não encontrado |
-| `PUT` | `/users/:id` | `{name?, email?, password?, role?}` | Não | `200` usuário atualizado | `404` não encontrado |
-| `DELETE` | `/users/:id` | — | Não | `200` usuário deletado | `404` não encontrado |
+| `PUT` | `/users/:id` | `{name?, email?, password?, role?}` | **Admin** | `200` usuário atualizado | `401` / `403` / `404` não encontrado |
+| `DELETE` | `/users/:id` | — | **Admin** | `200` usuário deletado (contatos em cascata) | `401` / `403` / `404` não encontrado |
 
 ### Contatos
 
@@ -813,10 +872,17 @@ Execute este fluxo do início ao fim para validar todas as funcionalidades em se
 | `PUT` | `/contacts/:id` | `{name?, phone?, email?}` | Sim | `200` contato atualizado | `403` não é dono / `404` não existe |
 | `DELETE` | `/contacts/:id` | — | Sim | `200` contato deletado | `403` não é dono / `404` não existe |
 
-### Headers de autenticação (rotas de contatos)
+### Headers de autenticação
 
+**Rotas de contatos** (qualquer usuário autenticado):
 ```
 email: <email-do-usuario>
+password: <senha-em-texto-puro>
+```
+
+**Rotas admin** (`GET /users`, `PUT /users/:id`, `DELETE /users/:id`):
+```
+email: <email-de-usuario-com-role-admin>
 password: <senha-em-texto-puro>
 ```
 
@@ -894,22 +960,26 @@ lsof -ti:3100 | xargs kill
 
 ---
 
-### Erro ao deletar usuário com contatos
+### HTTP 403 ao acessar `GET /users`, `PUT /users/:id` ou `DELETE /users/:id`
 
-**Causa:** o banco rejeita a deleção por causa da constraint de chave estrangeira — os contatos referenciam o usuário.
+**Causa:** a rota exige `role: "admin"` e o usuário autenticado tem `role: "user"`.
 
-**Solução:** delete todos os contatos do usuário antes de deletar o usuário:
+**Solução:** use as credenciais de um usuário criado com `"role": "admin"`. Se ainda não existe um admin, crie:
 ```bash
-# 1. Listar contatos do usuário
-curl http://localhost:3100/contacts \
-  -H "email: usuario@email.com" \
-  -H "password: senha"
-
-# 2. Deletar cada contato
-curl -X DELETE http://localhost:3100/contacts/<ID_DO_CONTATO> \
-  -H "email: usuario@email.com" \
-  -H "password: senha"
-
-# 3. Deletar o usuário
-curl -X DELETE http://localhost:3100/users/<ID_DO_USUARIO>
+curl -X POST http://localhost:3100/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Administrador",
+    "email": "admin@sistema.com",
+    "password": "senhaAdmin123",
+    "role": "admin"
+  }'
 ```
+
+---
+
+### Swagger UI não abre em `http://localhost:3100/docs`
+
+**Causa:** o servidor não está rodando ou foi iniciado antes das dependências serem instaladas.
+
+**Solução:** confirme que `npm run dev` está ativo no terminal. Se necessário, pare (`Ctrl+C`) e reinicie.
