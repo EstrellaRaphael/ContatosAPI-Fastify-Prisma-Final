@@ -1,0 +1,33 @@
+{
+  "name": "api-contatos-fastify-prisma",
+  "version": "1.0.0",
+  "description": "API RESTful de agenda de contatos com Fastify, Prisma 7 e TypeScript",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx --watch src/server.ts",
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "prisma": "^7.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.0"
+  },
+  "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.7.0",
+    "@prisma/client": "^7.6.0",
+    "bcryptjs": "^3.0.0",
+    "better-sqlite3": "^12.0.0",
+    "dotenv": "^16.0.0",
+    "fastify": "^5.8.0",
+    "@fastify/swagger": "^9.0.0",
+    "@fastify/swagger-ui": "^5.0.0"
+  }
+}
